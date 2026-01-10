@@ -1,4 +1,4 @@
-# 🚨 Cloud Run Deployment Fix for DecXpert CT
+# Cloud Run Deployment Fix for DecXpert CT
 
 ## Issue Identified
 Your deployed app at decxpert-ct.com is failing due to **Cloud Run timeout and request size limits**.
@@ -10,12 +10,12 @@ Your deployed app at decxpert-ct.com is failing due to **Cloud Run timeout and r
 
 ---
 
-## ✅ Fix Instructions
+## Fix Instructions
 
-### Step 1: Configure Deployment Settings in Replit
+### Step 1: Configure Deployment Settings
 
-1. **Go to your Replit deployment settings**:
-   - Open your Repl
+1. **Go to your deployment settings**:
+   - Open your deployment dashboard
    - Click on "Deployments" tab
    - Click on your active deployment
 
@@ -26,7 +26,7 @@ Your deployed app at decxpert-ct.com is failing due to **Cloud Run timeout and r
 
 3. **Add Environment Variables** (if not already set):
    - `OPENAI_API_KEY`: Your OpenAI API key
-   - `DATABASE_URL`: Your Neon database URL
+   - `DATABASE_URL`: Your PostgreSQL database URL
    - `NODE_ENV`: `production`
 
 ### Step 2: Redeploy Your Application
@@ -72,7 +72,7 @@ After redeployment, verify:
 
 ### For Large CT Scans (150-200 slices):
 
-1. **Enable HTTP/2** (if available in Replit settings):
+1. **Enable HTTP/2**:
    - Removes 32 MB request limit
    - Allows unlimited request size
 
@@ -87,15 +87,15 @@ After redeployment, verify:
 
 ---
 
-## Current Server Configuration ✅
+## Current Server Configuration
 
 Your server is already configured correctly:
-- ✅ Server timeout: 10 minutes (600s)
-- ✅ Keep-alive timeout: 10m 10s
-- ✅ Headers timeout: 10m 20s
-- ✅ Health check endpoint: `/health`
-- ✅ Request payload limit: 100mb
-- ✅ Compression enabled
+- Server timeout: 10 minutes (600s)
+- Keep-alive timeout: 10m 10s
+- Headers timeout: 10m 20s
+- Health check endpoint: `/health`
+- Request payload limit: 100mb
+- Compression enabled
 
 **The issue is Cloud Run's default settings, not your code.**
 
@@ -104,9 +104,9 @@ Your server is already configured correctly:
 ## Contact Support
 
 If issues persist after redeployment:
-1. Check Replit deployment logs for errors
+1. Check deployment logs for errors
 2. Verify OPENAI_API_KEY is set in production secrets
-3. Contact Replit support for Cloud Run timeout configuration assistance
+3. Contact your hosting provider's support for timeout configuration assistance
 
 ---
 

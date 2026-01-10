@@ -1,5 +1,5 @@
-// Simple text-based PDF generation for Replit environment
-// This creates a downloadable HTML file that can be saved as PDF
+// Simple text-based PDF generation
+// Creates a downloadable HTML file that can be saved as PDF
 
 import type { PathologySlice, CriticalFinding } from "@shared/schema";
 import { 

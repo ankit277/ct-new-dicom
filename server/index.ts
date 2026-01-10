@@ -91,7 +91,6 @@ app.use((req, res, next) => {
   console.log(`[startup] Environment variables:`, {
     NODE_ENV: process.env.NODE_ENV,
     PORT: process.env.PORT,
-    REPLIT_DEPLOYMENT: process.env.REPLIT_DEPLOYMENT,
     parsedPort: port
   });
   
