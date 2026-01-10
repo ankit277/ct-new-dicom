@@ -126,7 +126,8 @@ export class SimplePdfService {
                             <span class="slice-number">Slice #${slice.sliceIndex + 1}</span>
                             <span class="slice-confidence">${slice.confidence}% confidence</span>
                         </div>
-                        <img src="data:image/png;base64,${slice.imageData}" alt="CT Slice ${slice.sliceIndex + 1}" class="ct-image" />
+                        <div class="slice-filename" style="font-size: 10px; color: #94a3b8; padding: 2px 8px; background: rgba(0,0,0,0.05);">${slice.filename || `CT_Slice_${String(slice.sliceIndex + 1).padStart(4, '0')}.dcm`}</div>
+                        <img src="data:image/png;base64,${slice.imageData}" alt="CT Slice ${slice.sliceIndex + 1} - ${slice.filename || ''}" class="ct-image" />
                         <div class="slice-findings">
                             <strong>Detected:</strong> ${slice.detectedPathologies.join(', ')}<br>
                             <span class="findings-text">${slice.findings || 'See detailed findings'}</span>
@@ -152,7 +153,8 @@ export class SimplePdfService {
                             <span class="slice-number">Slice #${slice.sliceIndex + 1}</span>
                             <span class="slice-confidence">${slice.confidence}% confidence</span>
                         </div>
-                        <img src="data:image/png;base64,${slice.imageData}" alt="CT Slice ${slice.sliceIndex + 1}" class="ct-image" />
+                        <div class="slice-filename" style="font-size: 10px; color: #94a3b8; padding: 2px 8px; background: rgba(0,0,0,0.05);">${slice.filename || `CT_Slice_${String(slice.sliceIndex + 1).padStart(4, '0')}.dcm`}</div>
+                        <img src="data:image/png;base64,${slice.imageData}" alt="CT Slice ${slice.sliceIndex + 1} - ${slice.filename || ''}" class="ct-image" />
                         <div class="slice-findings">
                             <strong>Detected:</strong> ${slice.detectedPathologies.join(', ')}<br>
                             <span class="findings-text">${slice.findings || 'See detailed findings'}</span>
@@ -588,7 +590,8 @@ This report was generated using proprietary AI technology for chest CT analysis.
                             <span class="slice-number">Slice #${slice.sliceNumber}</span>
                             <span class="slice-confidence">${slice.confidence}% confidence</span>
                         </div>
-                        <img src="data:image/png;base64,${slice.imageData}" alt="CT Slice ${slice.sliceNumber}" class="ct-image" />
+                        <div class="slice-filename" style="font-size: 10px; color: #94a3b8; padding: 2px 8px; background: rgba(0,0,0,0.05);">${slice.filename}</div>
+                        <img src="data:image/png;base64,${slice.imageData}" alt="CT Slice ${slice.sliceNumber} - ${slice.filename}" class="ct-image" />
                         <div class="slice-findings">
                             <strong>Detected:</strong> ${slice.detectedPathologies.join(', ')}<br>
                             <span class="findings-text">${slice.findings}</span>
@@ -636,7 +639,8 @@ This report was generated using proprietary AI technology for chest CT analysis.
                             <span class="slice-number">Slice #${slice.sliceNumber}</span>
                             <span class="slice-confidence">${slice.confidence}% confidence</span>
                         </div>
-                        <img src="data:image/png;base64,${slice.imageData}" alt="CT Slice ${slice.sliceNumber}" class="ct-image" />
+                        <div class="slice-filename" style="font-size: 10px; color: #94a3b8; padding: 2px 8px; background: rgba(0,0,0,0.05);">${slice.filename}</div>
+                        <img src="data:image/png;base64,${slice.imageData}" alt="CT Slice ${slice.sliceNumber} - ${slice.filename}" class="ct-image" />
                         <div class="slice-findings">
                             <strong>Detected:</strong> ${slice.detectedPathologies.join(', ')}<br>
                             <span class="findings-text">${slice.findings}</span>

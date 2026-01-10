@@ -84,11 +84,14 @@ export function MedicalReport({ analysis, patientData, onDownload }: MedicalRepo
         <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 15px; margin-top: 20px;">
           ${criticalSlicesForPrint.slice(0, 8).map((slice: any) => `
             <div style="border: 2px solid #dc2626; border-radius: 8px; overflow: hidden; background: #fef2f2;">
-              <div style="background: #dc2626; color: white; padding: 8px 12px; display: flex; justify-content: space-between; font-size: 12px;">
-                <span>Slice #${slice.sliceIndex + 1}</span>
-                <span>${slice.confidence}% confidence</span>
+              <div style="background: #dc2626; color: white; padding: 8px 12px; font-size: 12px;">
+                <div style="display: flex; justify-content: space-between;">
+                  <span>Slice #${slice.sliceIndex + 1}</span>
+                  <span>${slice.confidence}% confidence</span>
+                </div>
+                <div style="font-size: 10px; opacity: 0.9; margin-top: 2px;">${slice.filename || `CT_Slice_${String(slice.sliceIndex + 1).padStart(4, '0')}.dcm`}</div>
               </div>
-              <img src="data:image/png;base64,${slice.imageData}" style="width: 100%; height: auto; display: block;" alt="CT Slice ${slice.sliceIndex + 1}" />
+              <img src="data:image/png;base64,${slice.imageData}" style="width: 100%; height: auto; display: block;" alt="CT Slice ${slice.sliceIndex + 1} - ${slice.filename || ''}" />
               <div style="padding: 10px; font-size: 11px; line-height: 1.4;">
                 <strong>Detected:</strong> ${slice.detectedPathologies.join(', ')}<br>
                 <span style="color: #64748b; display: block; margin-top: 5px;">${slice.findings || 'See detailed findings'}</span>
@@ -126,11 +129,14 @@ export function MedicalReport({ analysis, patientData, onDownload }: MedicalRepo
             const isCritical = slice.detectedPathologies.some((p: string) => CRITICAL_PATHOLOGIES_PRINT.includes(p));
             return `
             <div style="border: ${isCritical ? '2px solid #dc2626' : '1px solid #e2e8f0'}; border-radius: 8px; overflow: hidden; background: ${isCritical ? '#fef2f2' : '#f8fafc'};">
-              <div style="background: ${isCritical ? '#dc2626' : '#1e40af'}; color: white; padding: 8px 12px; display: flex; justify-content: space-between; font-size: 12px;">
-                <span>Slice #${slice.sliceIndex + 1}</span>
-                <span>${slice.confidence}% confidence</span>
+              <div style="background: ${isCritical ? '#dc2626' : '#1e40af'}; color: white; padding: 8px 12px; font-size: 12px;">
+                <div style="display: flex; justify-content: space-between;">
+                  <span>Slice #${slice.sliceIndex + 1}</span>
+                  <span>${slice.confidence}% confidence</span>
+                </div>
+                <div style="font-size: 10px; opacity: 0.9; margin-top: 2px;">${slice.filename || `CT_Slice_${String(slice.sliceIndex + 1).padStart(4, '0')}.dcm`}</div>
               </div>
-              <img src="data:image/png;base64,${slice.imageData}" style="width: 100%; height: auto; display: block;" alt="CT Slice ${slice.sliceIndex + 1}" />
+              <img src="data:image/png;base64,${slice.imageData}" style="width: 100%; height: auto; display: block;" alt="CT Slice ${slice.sliceIndex + 1} - ${slice.filename || ''}" />
               <div style="padding: 10px; font-size: 11px; line-height: 1.4;">
                 <strong>Detected:</strong> ${slice.detectedPathologies.join(', ')}<br>
                 <span style="color: #64748b; display: block; margin-top: 5px;">${slice.findings || 'See detailed findings'}</span>
