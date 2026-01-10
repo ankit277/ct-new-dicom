@@ -377,11 +377,58 @@ export function mergeIndependentResults(results: IndependentPathologyResult[]): 
     confidence: avgConfidence,
     processingTime: 0,
     detailedFindings: results.map(r => `${r.pathology}: ${r.reasoning}`).join("\n\n"),
-    primaryDiagnosis: "Independent analysis completed",
+    primaryDiagnosis: generatePrimaryDiagnosisFromResults(results),
     recommendations: [],
     votingMetadata: {
       batchCount: 1,
       pathologyVotes: {}
     }
   };
+}
+
+/**
+ * Generate proper primary diagnosis from detected pathologies
+ * Prioritizes critical/life-threatening conditions
+ */
+function generatePrimaryDiagnosisFromResults(results: IndependentPathologyResult[]): string {
+  const detected = results.filter(r => r.present);
+  
+  if (detected.length === 0) {
+    return "Normal chest CT - No significant pathology detected";
+  }
+  
+  // Priority order: PE, Pneumothorax, Mass, TB, Pneumonia, ILD, COPD, PleuralEffusion
+  const priorityOrder = ["PE", "Pneumothorax", "Mass", "TB", "Pneumonia", "ILD", "COPD", "PleuralEffusion"];
+  
+  const sortedDetected = detected.sort((a, b) => {
+    const aIndex = priorityOrder.indexOf(a.pathology);
+    const bIndex = priorityOrder.indexOf(b.pathology);
+    return aIndex - bIndex;
+  });
+  
+  // Map canonical names to display names
+  const displayNames: Record<string, string> = {
+    "COPD": "COPD",
+    "ILD": "Interstitial Lung Disease",
+    "Mass": "Pulmonary Nodule/Mass",
+    "PE": "Pulmonary Embolism",
+    "Pneumonia": "Pneumonia",
+    "TB": "Tuberculosis",
+    "PleuralEffusion": "Pleural Effusion",
+    "Pneumothorax": "Pneumothorax"
+  };
+  
+  if (sortedDetected.length === 1) {
+    const pathology = sortedDetected[0];
+    const displayName = displayNames[pathology.pathology] || pathology.pathology;
+    const subtype = pathology.subtype ? ` - ${pathology.subtype}` : "";
+    return `${displayName}${subtype}`;
+  }
+  
+  // Multiple pathologies
+  const names = sortedDetected.slice(0, 3).map(p => displayNames[p.pathology] || p.pathology);
+  if (sortedDetected.length > 3) {
+    return `Multiple pathologies: ${names.join(", ")} + ${sortedDetected.length - 3} additional`;
+  }
+  return `Multiple pathologies: ${names.join(", ")}`;
 }
