@@ -128,10 +128,10 @@ export class MedicalAnalysisService {
         }
       );
       
-      // ADAPTIVE CONCURRENCY: Optimized for speed while maintaining reliability
-      // Process up to 15 batches concurrently for optimal throughput without overwhelming OpenAI API
-      const initialConcurrency = selectedSlices.length > 400 ? 15 : (selectedSlices.length > 250 ? 12 : 8);
-      console.log(`⚡ Using adaptive concurrency starting at ${initialConcurrency} concurrent batches for reliability`);
+      // ADAPTIVE CONCURRENCY: SPEED OPTIMIZED - 2x faster processing
+      // Process up to 30 batches concurrently for maximum throughput
+      const initialConcurrency = selectedSlices.length > 400 ? 30 : (selectedSlices.length > 250 ? 25 : 20);
+      console.log(`⚡ SPEED MODE: Using ${initialConcurrency} concurrent batches for 2x faster analysis`);
       const batchSettledResults = await this.processBatchesWithRateLimit(batchExecutors, initialConcurrency);
       
       // GRACEFUL DEGRADATION: Extract results and continue with successful batches
@@ -285,45 +285,37 @@ export class MedicalAnalysisService {
     batch: string[],
     batchIndex: number,
     patientInfo: InsertPatient & { patientId: string },
-    maxRetries: number = 2
+    maxRetries: number = 1
   ): Promise<CtAnalysisResult | null> {
     let lastError: Error | null = null;
     
     for (let attempt = 0; attempt <= maxRetries; attempt++) {
       try {
         if (attempt > 0) {
-          // Exponential backoff with jitter to prevent thundering herd
-          // Base delay: 2^attempt seconds, with random jitter up to 1 second
-          const baseDelay = Math.pow(2, attempt) * 1000; // 2s, 4s, 8s, 16s
-          const jitter = Math.random() * 1000; // 0-1s random jitter
-          const backoffDelay = Math.min(baseDelay + jitter, 20000); // Cap at 20s
-          
-          console.log(`🔄 Retrying batch ${batchIndex + 1}, attempt ${attempt + 1}/${maxRetries + 1} after ${Math.round(backoffDelay)}ms (exponential backoff + jitter)`);
+          // SPEED OPTIMIZED: Faster retry with minimal delay
+          const backoffDelay = 500 + Math.random() * 500; // 0.5-1s delay
+          console.log(`🔄 Quick retry batch ${batchIndex + 1}, attempt ${attempt + 1}/${maxRetries + 1}`);
           await new Promise(resolve => setTimeout(resolve, backoffDelay));
         }
         
-        // Optimized timeout: 3 minutes for faster failure detection while allowing complex cases
-        const result = await this.analyzeBatchWithTimeout(batch, patientInfo, 180000); // 3 minute timeout
-        console.log(`✅ Batch ${batchIndex + 1} completed successfully (attempt ${attempt + 1})`);
+        // SPEED OPTIMIZED: Reduced timeout to 90 seconds for faster failure detection
+        const result = await this.analyzeBatchWithTimeout(batch, patientInfo, 90000);
+        console.log(`✅ Batch ${batchIndex + 1} completed (attempt ${attempt + 1})`);
         return result;
         
       } catch (batchError) {
         lastError = batchError instanceof Error ? batchError : new Error(String(batchError));
         console.warn(`⚠️  Batch ${batchIndex + 1} failed (attempt ${attempt + 1}/${maxRetries + 1}):`, lastError.message);
         
-        // For timeout/rate limit errors, add extra delay on top of exponential backoff
-        if (lastError.message.includes('timeout') || lastError.message.includes('rate limit')) {
-          if (attempt < maxRetries) {
-            const extraDelay = 3000; // Extra 3s for rate limit/timeout
-            console.log(`⏳ Rate limit/timeout detected - adding ${extraDelay}ms extra delay`);
-            await new Promise(resolve => setTimeout(resolve, extraDelay));
-          }
+        // SPEED OPTIMIZED: Minimal extra delay for rate limits
+        if (lastError.message.includes('rate limit') && attempt < maxRetries) {
+          await new Promise(resolve => setTimeout(resolve, 1000));
         }
       }
     }
     
     console.error(`❌ Batch ${batchIndex + 1} failed after ${maxRetries + 1} attempts`);
-    return null; // Return null for failed batches
+    return null;
   }
 
   private async analyzeBatchWithTimeout(

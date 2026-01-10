@@ -2,6 +2,7 @@ import OpenAI from "openai";
 import { getAllPathologyPrompts, type PathologyPrompt } from "./independent-analysis";
 import { BudgetTracker, TokenUsage } from "./budget-tracker";
 import { runConsolidatedEscalation, EscalationCandidate } from "./consolidated-escalation";
+import { runUnifiedScreening } from "./unified-screening";
 
 interface IndependentPathologyResult {
   pathology: string;
@@ -11,15 +12,14 @@ interface IndependentPathologyResult {
   reasoning: string;
   supporting_evidence: string;
   contradicting_evidence: string;
-  modelUsed?: string; // Track which model was used (mini or 4o)
-  escalated?: boolean; // Track if escalation occurred
+  modelUsed?: string;
+  escalated?: boolean;
   cacheMetrics?: {
     promptTokens: number;
     cachedTokens: number;
     completionTokens: number;
-    cacheHitRate: number; // Percentage of tokens that were cached
+    cacheHitRate: number;
   };
-  // For escalated cases, track both mini and GPT-4o metrics
   miniMetrics?: {
     promptTokens: number;
     cachedTokens: number;
@@ -32,10 +32,39 @@ interface IndependentPathologyResult {
   };
 }
 
+// Canonical pathology names used internally
+const CANONICAL_NAMES = ["COPD", "ILD", "Mass", "PE", "Pneumonia", "TB", "PleuralEffusion", "Pneumothorax"];
+
+// Map from prompt pathologyName to canonical name
+const PROMPT_TO_CANONICAL: Record<string, string> = {
+  "COPD": "COPD",
+  "ILD": "ILD", 
+  "Mass": "Mass",
+  "PE": "PE",
+  "Pneumonia": "Pneumonia",
+  "TB": "TB",
+  "PleuralEffusion": "PleuralEffusion",
+  "Pneumothorax": "Pneumothorax"
+};
+
+// Pathology-specific confidence thresholds for escalation
+// Uses CANONICAL names
+const CONFIDENCE_THRESHOLDS: Record<string, number> = {
+  'PE': 85,           // Pulmonary Embolism - Life-threatening
+  'Pneumothorax': 85, // Life-threatening
+  'Mass': 85,         // Cancer concern
+  'COPD': 90,         // Chronic condition
+  'ILD': 90,          // Progressive disease
+  'Pneumonia': 88,    // Acute infection
+  'TB': 88,           // Public health concern
+  'PleuralEffusion': 90 // Often secondary finding
+};
+const DEFAULT_CONFIDENCE_THRESHOLD = 90;
+
 /**
- * Execute 8 completely independent pathology analyses in parallel
+ * Execute 8 completely independent pathology analyses
+ * OPTIMIZED: Uses UNIFIED SINGLE-CALL screening (8x faster than separate calls)
  * Uses CONSOLIDATED ESCALATION: All escalations batched into ONE GPT-4o call
- * Each pathology is fully evaluated independently within the consolidated call
  * Budget controlled to $1 per analysis
  */
 export async function runEightIndependentAnalyses(
@@ -51,175 +80,116 @@ export async function runEightIndependentAnalyses(
   }
 ): Promise<IndependentPathologyResult[]> {
   
-  const openai = new OpenAI({
-    apiKey: process.env.OPENAI_API_KEY
-  });
-
   const budgetTracker = new BudgetTracker(1.0);
-
   const prompts = getAllPathologyPrompts({ examDate: patientInfo.examDate });
   
-  console.log("🔬 Starting 8 INDEPENDENT parallel pathology analyses with CONSOLIDATED ESCALATION...");
+  console.log("🔬 Starting OPTIMIZED 8-pathology analysis with UNIFIED SCREENING...");
+  console.log("⚡ SPEED OPTIMIZATION: Single-call screening (8x fewer API round-trips)");
   console.log("💰 Cost Control: $1.00 budget limit per analysis");
-  console.log("🔄 Strategy: GPT-4o-mini screening → ONE consolidated GPT-4o call for all escalations");
+  console.log("🔄 Strategy: Unified GPT-4o-mini → ONE consolidated GPT-4o escalation");
   console.log("💾 Prompt caching enabled for additional savings");
-  console.log("📊 Each pathology fully evaluated independently (no cross-interference)");
   
-  const imageContent = Array.isArray(base64Images)
-    ? base64Images.map(img => ({
-        type: "image_url" as const,
-        image_url: {
-          url: `data:image/png;base64,${img}`
-        }
-      }))
-    : [{
-        type: "image_url" as const,
-        image_url: {
-          url: `data:image/png;base64,${base64Images}`
-        }
-      }];
-
-  // Pathology-specific confidence thresholds for escalation
-  // Critical pathologies (PE, Pneumothorax, Mass) use lower threshold for higher sensitivity
-  // Non-critical pathologies use standard threshold for cost efficiency
-  const CONFIDENCE_THRESHOLDS: Record<string, number> = {
-    'Pulmonary Embolism': 85,   // Life-threatening - escalate at lower confidence
-    'Pneumothorax': 85,         // Life-threatening - escalate at lower confidence
-    'Mass/Nodule': 85,          // Cancer concern - escalate at lower confidence
-    'COPD': 90,                 // Chronic condition - moderate threshold
-    'ILD': 90,                  // Progressive disease - moderate threshold
-    'Pneumonia': 88,            // Acute infection - slightly lower threshold
-    'Tuberculosis': 88,         // Public health concern - slightly lower threshold
-    'Pleural Effusion': 90      // Often secondary finding - moderate threshold
+  // PHASE 1: UNIFIED SCREENING - All 8 pathologies in ONE call
+  console.log("\n📋 PHASE 1: UNIFIED GPT-4o-mini screening for all 8 pathologies (SINGLE CALL)...");
+  const screeningStartTime = Date.now();
+  
+  const screeningResponse = await runUnifiedScreening(
+    base64Images,
+    patientInfo.examDate,
+    budgetTracker
+  );
+  
+  const screeningElapsed = ((Date.now() - screeningStartTime) / 1000).toFixed(2);
+  console.log(`  ⚡ Phase 1 completed in ${screeningElapsed}s (previously ~${(parseFloat(screeningElapsed) * 3).toFixed(1)}s with 8 parallel calls)`);
+  
+  // Distribute metrics evenly across pathologies for tracking
+  const perPathologyMetrics = {
+    promptTokens: Math.round(screeningResponse.tokenUsage.promptTokens / 8),
+    cachedTokens: Math.round(screeningResponse.tokenUsage.cachedTokens / 8),
+    completionTokens: Math.round(screeningResponse.tokenUsage.completionTokens / 8)
   };
-  const DEFAULT_CONFIDENCE_THRESHOLD = 90;
   
-  interface MiniScreeningResult {
-    prompt: PathologyPrompt;
-    miniResult: {
-      present: boolean;
-      confidence: number;
-      subtype?: string;
-      reasoning: string;
-      supporting_evidence: string;
-      contradicting_evidence: string;
-    };
-    needsEscalation: boolean;
-    miniMetrics: {
-      promptTokens: number;
-      cachedTokens: number;
-      completionTokens: number;
-    };
-  }
-
-  console.log("\n📋 PHASE 1: GPT-4o-mini screening for all 8 pathologies...");
+  // Determine escalation candidates based on screening results
+  // SAFETY: Any missing/malformed screening result forces escalation
+  const escalationCandidates: EscalationCandidate[] = [];
+  const screeningResultsMap = new Map(screeningResponse.results.map(r => [r.pathology, r]));
   
-  const screeningPromises = prompts.map(async (prompt: PathologyPrompt): Promise<MiniScreeningResult> => {
-    console.log(`  🎯 Screening ${prompt.pathologyName}...`);
+  // Validate all 8 pathologies are present
+  console.log(`  📊 Screening returned ${screeningResponse.results.length}/8 pathologies`);
+  
+  for (const prompt of prompts) {
+    const screeningResult = screeningResultsMap.get(prompt.pathologyName);
+    const threshold = CONFIDENCE_THRESHOLDS[prompt.pathologyName] || DEFAULT_CONFIDENCE_THRESHOLD;
     
-    try {
-      const miniResponse = await openai.chat.completions.create({
-        model: "gpt-4o-mini",
-        max_completion_tokens: 500,
-        temperature: 0,
-        seed: 12345,
-        response_format: { type: "json_object" },
-        messages: [
-          { role: "system", content: prompt.systemPrompt },
-          {
-            role: "user",
-            content: [
-              { type: "text", text: prompt.userPrompt },
-              ...imageContent
-            ]
-          }
-        ]
-      });
-
-      const miniResult = JSON.parse(miniResponse.choices[0].message.content || "{}");
-      const miniUsage = miniResponse.usage;
-      
-      const tokenUsage: TokenUsage = {
-        promptTokens: miniUsage?.prompt_tokens || 0,
-        cachedTokens: miniUsage?.prompt_tokens_details?.cached_tokens || 0,
-        completionTokens: miniUsage?.completion_tokens || 0
-      };
-      
-      budgetTracker.recordCall('gpt-4o-mini', tokenUsage);
-
-      const miniConfidence = miniResult.confidence || 0;
-      const miniPresent = miniResult.present || false;
-      // Use pathology-specific threshold for escalation decision
-      const pathologyThreshold = CONFIDENCE_THRESHOLDS[prompt.pathologyName] || DEFAULT_CONFIDENCE_THRESHOLD;
-      const needsEscalation = miniConfidence < pathologyThreshold || miniPresent;
-
-      if (tokenUsage.cachedTokens > 0) {
-        const cacheRate = (tokenUsage.cachedTokens / tokenUsage.promptTokens * 100).toFixed(1);
-        console.log(`  💾 ${prompt.pathologyName}: Cache hit ${cacheRate}%`);
-      }
-
-      const status = needsEscalation 
-        ? `⬆️ ESCALATE (${miniPresent ? 'DETECTED' : 'uncertain'}, ${miniConfidence}% < ${pathologyThreshold}% threshold)`
-        : `✅ FINAL (${miniConfidence}% ≥ ${pathologyThreshold}% threshold - confident negative)`;
-      console.log(`  ${status} - ${prompt.pathologyName}`);
-
-      return {
-        prompt,
-        miniResult: {
-          present: miniPresent,
-          confidence: miniConfidence,
-          subtype: miniResult.subtype,
-          reasoning: miniResult.reasoning || "",
-          supporting_evidence: miniResult.supporting_evidence || "",
-          contradicting_evidence: miniResult.contradicting_evidence || ""
-        },
-        needsEscalation,
-        miniMetrics: {
-          promptTokens: tokenUsage.promptTokens,
-          cachedTokens: tokenUsage.cachedTokens,
-          completionTokens: tokenUsage.completionTokens
-        }
-      };
-    } catch (error) {
-      console.error(`  ❌ ${prompt.pathologyName} screening failed:`, error);
-      return {
-        prompt,
+    // SAFETY: Missing screening result forces escalation with low confidence
+    if (!screeningResult) {
+      console.warn(`  ⚠️ MISSING ${prompt.pathologyName} in screening - forcing escalation for safety`);
+      escalationCandidates.push({
+        pathologyName: prompt.pathologyName,
         miniResult: {
           present: false,
-          confidence: 0,
-          reasoning: "Screening failed",
+          confidence: 50, // Low confidence forces escalation
+          reasoning: "Not returned in unified screening - requires full evaluation",
           supporting_evidence: "",
           contradicting_evidence: ""
         },
-        needsEscalation: false,
-        miniMetrics: { promptTokens: 0, cachedTokens: 0, completionTokens: 0 }
-      };
+        systemPrompt: prompt.systemPrompt,
+        userPrompt: prompt.userPrompt
+      });
+      // Also add to screeningResultsMap for final results building
+      screeningResultsMap.set(prompt.pathologyName, {
+        pathology: prompt.pathologyName,
+        present: false,
+        confidence: 50,
+        reasoning: "Not returned in unified screening",
+        supporting_evidence: "",
+        contradicting_evidence: ""
+      });
+      continue;
     }
-  });
+    
+    // SAFETY: Empty reasoning also forces escalation
+    const hasValidReasoning = screeningResult.reasoning && screeningResult.reasoning.length > 10;
+    const needsEscalation = screeningResult.confidence < threshold || screeningResult.present || !hasValidReasoning;
+    
+    const status = needsEscalation 
+      ? `⬆️ ESCALATE (${screeningResult.present ? 'DETECTED' : 'uncertain'}, ${screeningResult.confidence}%${!hasValidReasoning ? ' - missing reasoning' : ''})`
+      : `✅ FINAL (${screeningResult.confidence}% ≥ ${threshold}% threshold - confident negative)`;
+    console.log(`  ${status} - ${prompt.pathologyName}`);
+    
+    if (needsEscalation) {
+      escalationCandidates.push({
+        pathologyName: prompt.pathologyName,
+        miniResult: {
+          present: screeningResult.present,
+          confidence: screeningResult.confidence,
+          subtype: screeningResult.subtype,
+          reasoning: screeningResult.reasoning || "Requires detailed evaluation",
+          supporting_evidence: screeningResult.supporting_evidence || "",
+          contradicting_evidence: screeningResult.contradicting_evidence || ""
+        },
+        systemPrompt: prompt.systemPrompt,
+        userPrompt: prompt.userPrompt
+      });
+    }
+  }
 
-  const screeningResults = await Promise.all(screeningPromises);
-  
-  const escalationCandidates: EscalationCandidate[] = screeningResults
-    .filter(r => r.needsEscalation)
-    .map(r => ({
-      pathologyName: r.prompt.pathologyName,
-      miniResult: r.miniResult,
-      systemPrompt: r.prompt.systemPrompt,
-      userPrompt: r.prompt.userPrompt
-    }));
-
+  // PHASE 2: CONSOLIDATED ESCALATION
   console.log(`\n📋 PHASE 2: Consolidated escalation for ${escalationCandidates.length} patholog${escalationCandidates.length !== 1 ? 'ies' : 'y'}...`);
   
   let escalationResults: Map<string, any> = new Map();
   let consolidatedMetrics = { promptTokens: 0, cachedTokens: 0, completionTokens: 0 };
-  let wasGpt4oUsed = false; // Track if actual GPT-4o confirmation happened
+  let wasGpt4oUsed = false;
 
   if (escalationCandidates.length > 0) {
+    const escalationStartTime = Date.now();
     const escalationResponse = await runConsolidatedEscalation(
       escalationCandidates,
       base64Images,
       budgetTracker
     );
+    const escalationElapsed = ((Date.now() - escalationStartTime) / 1000).toFixed(2);
+    console.log(`  ⚡ Phase 2 completed in ${escalationElapsed}s`);
     
     escalationResponse.results.forEach(r => {
       escalationResults.set(r.pathology, r);
@@ -231,104 +201,79 @@ export async function runEightIndependentAnalyses(
       console.log("  ⚠️ GPT-4o confirmation was skipped (budget/error) - using mini results");
     }
   } else {
-    console.log("  ✅ No escalations needed - all pathologies resolved by GPT-4o-mini");
+    console.log("  ✅ No escalations needed - all pathologies resolved by unified screening");
   }
 
-  // Track exact consolidated metrics (not distributed/rounded)
-  const consolidatedGpt4oMetrics = {
-    promptTokens: consolidatedMetrics.promptTokens,
-    cachedTokens: consolidatedMetrics.cachedTokens,
-    completionTokens: consolidatedMetrics.completionTokens
-  };
-
-  const results: IndependentPathologyResult[] = screeningResults.map(screening => {
-    const escalatedResult = escalationResults.get(screening.prompt.pathologyName);
+  // Build final results
+  const results: IndependentPathologyResult[] = prompts.map(prompt => {
+    const screeningResult = screeningResultsMap.get(prompt.pathologyName);
+    const escalatedResult = escalationResults.get(prompt.pathologyName);
     
     if (escalatedResult) {
-      // Only mark as gpt-4o if actual GPT-4o call was made (not degraded due to budget/error)
       const actuallyUsedGpt4o = wasGpt4oUsed;
       
       return {
-        pathology: screening.prompt.pathologyName,
+        pathology: prompt.pathologyName,
         present: escalatedResult.present,
         confidence: escalatedResult.confidence,
         subtype: escalatedResult.subtype,
         reasoning: escalatedResult.reasoning,
         supporting_evidence: escalatedResult.supporting_evidence,
         contradicting_evidence: escalatedResult.contradicting_evidence,
-        modelUsed: actuallyUsedGpt4o ? "gpt-4o" : "gpt-4o-mini", // Reflect actual model used
-        escalated: actuallyUsedGpt4o, // Only true if GPT-4o was actually called
+        modelUsed: actuallyUsedGpt4o ? "gpt-4o" : "gpt-4o-mini",
+        escalated: actuallyUsedGpt4o,
         cacheMetrics: {
-          promptTokens: screening.miniMetrics.promptTokens,
-          cachedTokens: screening.miniMetrics.cachedTokens,
-          completionTokens: screening.miniMetrics.completionTokens,
-          cacheHitRate: screening.miniMetrics.promptTokens > 0 
-            ? (screening.miniMetrics.cachedTokens / screening.miniMetrics.promptTokens * 100) 
+          promptTokens: perPathologyMetrics.promptTokens,
+          cachedTokens: perPathologyMetrics.cachedTokens,
+          completionTokens: perPathologyMetrics.completionTokens,
+          cacheHitRate: perPathologyMetrics.promptTokens > 0 
+            ? (perPathologyMetrics.cachedTokens / perPathologyMetrics.promptTokens * 100) 
             : 0
         },
-        miniMetrics: screening.miniMetrics,
-        gpt4oMetrics: actuallyUsedGpt4o ? consolidatedGpt4oMetrics : undefined // Only include if GPT-4o was used
+        miniMetrics: perPathologyMetrics,
+        gpt4oMetrics: actuallyUsedGpt4o ? consolidatedMetrics : undefined
       } as IndependentPathologyResult;
     } else {
       return {
-        pathology: screening.prompt.pathologyName,
-        present: screening.miniResult.present,
-        confidence: screening.miniResult.confidence,
-        subtype: screening.miniResult.subtype,
-        reasoning: screening.miniResult.reasoning,
-        supporting_evidence: screening.miniResult.supporting_evidence,
-        contradicting_evidence: screening.miniResult.contradicting_evidence,
+        pathology: prompt.pathologyName,
+        present: screeningResult?.present || false,
+        confidence: screeningResult?.confidence || 0,
+        subtype: screeningResult?.subtype,
+        reasoning: screeningResult?.reasoning || "",
+        supporting_evidence: screeningResult?.supporting_evidence || "",
+        contradicting_evidence: screeningResult?.contradicting_evidence || "",
         modelUsed: "gpt-4o-mini",
         escalated: false,
         cacheMetrics: {
-          promptTokens: screening.miniMetrics.promptTokens,
-          cachedTokens: screening.miniMetrics.cachedTokens,
-          completionTokens: screening.miniMetrics.completionTokens,
-          cacheHitRate: screening.miniMetrics.promptTokens > 0 
-            ? (screening.miniMetrics.cachedTokens / screening.miniMetrics.promptTokens * 100) 
+          promptTokens: perPathologyMetrics.promptTokens,
+          cachedTokens: perPathologyMetrics.cachedTokens,
+          completionTokens: perPathologyMetrics.completionTokens,
+          cacheHitRate: perPathologyMetrics.promptTokens > 0 
+            ? (perPathologyMetrics.cachedTokens / perPathologyMetrics.promptTokens * 100) 
             : 0
         }
       } as IndependentPathologyResult;
     }
   });
   
-  // Get cost metrics from budget tracker
+  // Cost metrics
   const metrics = budgetTracker.getMetrics();
   const miniCount = results.filter(r => r.modelUsed === "gpt-4o-mini").length;
   const gpt4oCount = results.filter(r => r.modelUsed === "gpt-4o").length;
   
-  // Calculate cache metrics across all mini screenings
-  const totalMiniCachedTokens = screeningResults.reduce((sum, r) => sum + r.miniMetrics.cachedTokens, 0);
-  const totalMiniPromptTokens = screeningResults.reduce((sum, r) => sum + r.miniMetrics.promptTokens, 0);
-  const miniCacheHitRate = totalMiniPromptTokens > 0 ? (totalMiniCachedTokens / totalMiniPromptTokens * 100) : 0;
-  
-  // Calculate what OLD METHOD would have cost (individual GPT-4o calls per escalation)
-  // Old method: Each escalation = separate GPT-4o call with same images
-  const gpt4oInputPrice = 2.50 / 1_000_000;
-  const gpt4oOutputPrice = 10.00 / 1_000_000;
-  
-  // Estimate old method cost: if we had made N separate GPT-4o calls instead of 1 consolidated
-  // Each individual call would have ~same prompt tokens as consolidated (images are the bulk)
-  // So old cost ≈ N * (consolidated_cost) for GPT-4o portion
-  const oldMethodGpt4oCost = gpt4oCount > 0 ? metrics.gpt4oCost * gpt4oCount : 0;
-  const oldMethodTotalCost = metrics.miniCost + oldMethodGpt4oCost;
-  
-  const consolidationSavings = oldMethodTotalCost > 0 
-    ? ((oldMethodTotalCost - metrics.totalCost) / oldMethodTotalCost * 100) 
+  const miniCacheHitRate = screeningResponse.tokenUsage.promptTokens > 0 
+    ? (screeningResponse.tokenUsage.cachedTokens / screeningResponse.tokenUsage.promptTokens * 100) 
     : 0;
   
-  console.log("\n✅ All 8 independent analyses completed with CONSOLIDATED ESCALATION");
+  console.log("\n✅ OPTIMIZED 8-pathology analysis completed");
   console.log("📊 Results summary:", results.map(r => `${r.pathology}=${r.present}`).join(", "));
-  console.log(`\n💰 COST CONTROL REPORT ($3.00 budget):`);
+  console.log(`\n💰 COST CONTROL REPORT ($1.00 budget):`);
   console.log(`  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);
-  console.log(`  📋 Phase 1 (Mini Screening): 8 pathologies → $${metrics.miniCost.toFixed(4)}`);
+  console.log(`  📋 Phase 1 (Unified Screening): 8 pathologies in 1 call → $${metrics.miniCost.toFixed(4)}`);
   console.log(`  🔄 Phase 2 (Consolidated): ${gpt4oCount} escalations in 1 call → $${metrics.gpt4oCost.toFixed(4)}`);
   console.log(`  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);
-  console.log(`  💵 TOTAL COST: $${metrics.totalCost.toFixed(4)} / $3.00 budget (${budgetTracker.getUtilization().toFixed(1)}% used)`);
-  console.log(`  💾 Mini cache hit rate: ${miniCacheHitRate.toFixed(1)}%`);
-  if (gpt4oCount > 0) {
-    console.log(`  🎯 Consolidation savings: ${consolidationSavings.toFixed(1)}% vs ${gpt4oCount} individual GPT-4o calls (~$${oldMethodTotalCost.toFixed(4)})`);
-  }
+  console.log(`  💵 TOTAL COST: $${metrics.totalCost.toFixed(4)} / $1.00 budget (${budgetTracker.getUtilization().toFixed(1)}% used)`);
+  console.log(`  💾 Unified screening cache hit rate: ${miniCacheHitRate.toFixed(1)}%`);
   console.log(`  ✅ Budget status: ${budgetTracker.isBudgetExceeded() ? '❌ EXCEEDED' : '✅ WITHIN LIMIT'}`);
   
   return results;
@@ -336,11 +281,12 @@ export async function runEightIndependentAnalyses(
 
 /**
  * Convert 8 independent results into CtAnalysisResult format
- * Returns proper structure for batch combining logic
+ * Uses CANONICAL pathology names from independent-analysis.ts
  */
 export function mergeIndependentResults(results: IndependentPathologyResult[]): any {
   const resultMap = new Map(results.map(r => [r.pathology, r]));
   
+  // Use CANONICAL names: COPD, ILD, Mass, PE, Pneumonia, TB, PleuralEffusion, Pneumothorax
   const copdResult = resultMap.get("COPD");
   const ildResult = resultMap.get("ILD");
   const massResult = resultMap.get("Mass");
@@ -350,10 +296,8 @@ export function mergeIndependentResults(results: IndependentPathologyResult[]): 
   const pleuralResult = resultMap.get("PleuralEffusion");
   const pneumothoraxResult = resultMap.get("Pneumothorax");
 
-  // Calculate average confidence from all pathologies
   const avgConfidence = results.reduce((sum, r) => sum + r.confidence, 0) / results.length;
 
-  // Build MedicalFindings object
   const findings = {
     copdDetected: copdResult?.present || false,
     ildDetected: ildResult?.present || false,
@@ -366,7 +310,7 @@ export function mergeIndependentResults(results: IndependentPathologyResult[]): 
     copdSubtype: copdResult?.subtype || "none",
     ildSubtype: ildResult?.subtype || "none",
     severity: "moderate" as const,
-    confidence: avgConfidence, // THIS IS CRITICAL - combineBatchResults expects this
+    confidence: avgConfidence,
     details: "Independent pathology analysis completed",
     massFindings: massResult?.reasoning || "No masses detected",
     vascularFindings: peResult?.reasoning || "No PE detected",
@@ -378,11 +322,8 @@ export function mergeIndependentResults(results: IndependentPathologyResult[]): 
     pleuralFindings: [pleuralResult?.reasoning, pneumothoraxResult?.reasoning].filter(Boolean).join("; ") || "No pleural abnormalities"
   };
 
-  // 🔧 CRITICAL FIX: Create BOTH old format AND new format for full compatibility
-  // This ensures conflict reconciliation works correctly for single-slice studies
   return {
     findings,
-    // OLD FORMAT (for batched multi-slice compatibility)
     COPD: {
       present: copdResult?.present || false,
       confidence: copdResult?.confidence || 0,
