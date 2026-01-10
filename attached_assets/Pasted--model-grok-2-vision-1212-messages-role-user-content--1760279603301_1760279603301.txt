@@ -1,0 +1,10 @@
+{
+  "model": "grok-2-vision-1212",
+  "messages": [
+    {
+      "role": "user",
+      "content": [
+        {
+          "type": "text",
+          "text": "Analyze the uploaded series of chest CT images and generate a professional radiological report. Structure the report as follows:\n- **Patient Information**: Include placeholders for date (October 13, 2025), time (12:32 AM AEST), and modality (CT Chest Axial Slices).\n- **Clinical Indications**: Evaluation for COPD, ILD, lung cancer, pulmonary embolism, pneumonia, tuberculosis, pleural effusion, and pneumothorax.\n- **Findings**: Provide detailed, sectioned assessments for each pathology:\n  - **COPD Detection**: Look for emphysema, bullae, or air trapping.\n  - **ILD Detection**: Check for reticular patterns, honeycombing, or ground-glass opacities.\n  - **Lung Cancer Detection**: Identify nodules/masses with features like spiculation, irregular margins, corona radiata sign, pleural retraction, or linear strands (focus on any suspicious lesions, e.g., 24mm in right upper lobe posterior segment).\n  - **Pulmonary Embolism**: Scan for filling defects in pulmonary arteries or infarction signs.\n  - **Pneumonia Detection**: Note consolidations, tree-in-bud, or ground-glass opacities.\n  - **Tuberculosis Detection**: Look for cavitary lesions, upper lobe fibrosis, or calcifications.\n  - **Pleural Effusion**: Assess for fluid levels or blunting of angles.\n  - **Pneumothorax Detection**: Check for pleural separation or lung collapse.\n  - **Additional Findings**: Include any lymphadenopathy (e.g., right paratracheal node ~14mm) or other abnormalities.\n- **Impression**: Summarize key findings with numbered priorities (e.g., suspicious for malignancy).\n- **Recommendations**: Suggest follow-ups like biopsy, contrast CT, or specialist referral.\n- **Note**: Emphasize this is AI analysis; consult a radiologist for final diagnosis.\nBase the report on visual analysis of all slices, correlating findings across levels. Be precise with locations, sizes, and characteristics. If no findings for a category, state 'No evidence observed' and recommend further imaging."
+        },

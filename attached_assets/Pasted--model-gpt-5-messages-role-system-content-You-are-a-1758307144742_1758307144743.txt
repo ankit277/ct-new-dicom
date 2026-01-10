@@ -1,0 +1,15 @@
+{
+  "model": "gpt-5",
+  "messages": [
+    {
+      "role": "system",
+      "content": "You are an expert AI radiologist specializing in thoracic imaging. Your task is to analyze chest CT images with a target of 95% sensitivity and 95% specificity."
+    },
+    {
+      "role": "user",
+      "content": "Analyze the provided diagnostic-quality chest CT image (no major artifacts). Follow these steps:\n\n1. Pathologies to assess:\n   - COPD\n   - ILD (Interstitial Lung Disease)\n   - Lung Cancer\n   - Pulmonary Embolism\n   - Pneumonia\n   - Tuberculosis\n   - Pleural Effusion\n   - Pneumothorax\n\n2. For each pathology, report:\n   - Presence: yes / no / probable / absent\n   - Confidence: high / medium / low\n   - Step-by-step reasoning based on radiological markers\n   - Cross-checks to minimize false positives/negatives\n\n3. Special considerations:\n   - If multiple pathologies coexist, describe overlaps or complications (e.g., pneumothorax secondary to COPD bullae).\n   - Highlight distinguishing features (e.g., cavitation in TB vs lung cancer).\n   - If image quality is poor or ambiguous, recommend further imaging (e.g., HRCT).\n   - Flag urgent/life-threatening findings (e.g., tension pneumothorax).\n\n---\n\nRadiological markers (apply strict thresholds for 95% sensitivity & specificity):\n\n- COPD: Hyperinflation (>6 anterior or >10 posterior ribs, flattened diaphragm, increased retrosternal airspace), bullae, osteopenic ribs, emphysema (HU <-950), airway wall thickening >2.5 mm, air trapping (RV >40%), reduced lung density.\n\n- ILD: Reticular/reticulonodular patterns, GGO (hazy, vessels visible), honeycombing (>2 mm cysts), traction bronchiectasis, basal/subpleural predominance (UIP), centrilobular nodules, irregular opacities, subpleural sparing (NSIP).\n\n- Lung Cancer: Nodule/mass (>8 mm, spiculated/cavitary/irregular), hilar/mediastinal enlargement, lobar collapse, pleural effusion, CT features (size, irregular margins, >15 HU enhancement, invasion).\n\n- Pulmonary Embolism: Filling defects in pulmonary arteries (CT), Westermark sign, Hampton hump, pulmonary artery >16 mm, hyperdense lumen (non-contrast), indirect signs (effusion, infarct).\n\n- Pneumonia: Consolidation (lobar/segmental with air bronchograms), GGO, centrilobular nodules, interstitial pattern, basal/multifocal, effusion/abscess (>4 mm wall).\n\n- Tuberculosis: Upper lobe cavitation (>10 mm, thick wall), tree-in-bud opacities, miliary nodules (1–3 mm), lymphadenopathy (±calcified), Ghon complex, fibrosis/scarring, pleural thickening/effusion.\n\n- Pleural Effusion: Blunted costophrenic angle, meniscus sign, mediastinal shift (>500 mL), layering (decubitus), subpulmonic effusion, CT/US: 0–20 HU fluid, loculations/septations.\n\n- Pneumothorax: Visceral pleural line, absent lung markings beyond, deep sulcus sign, mediastinal/tracheal shift (tension), subcutaneous emphysema, CT: pleural air with >10% lung collapse."
+    }
+  ],
+  "temperature": 0.2,
+  "max_tokens": 2000
+}

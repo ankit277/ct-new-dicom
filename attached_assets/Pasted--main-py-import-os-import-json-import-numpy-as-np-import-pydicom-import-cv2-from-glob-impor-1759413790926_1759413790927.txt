@@ -1,0 +1,98 @@
+# main.py
+
+import os
+import json
+import numpy as np
+import pydicom
+import cv2
+from glob import glob
+
+# ------------------------------
+# DICOM Preprocessing Functions
+# ------------------------------
+
+def load_dicom_series(dicom_folder):
+    """Load and sort DICOM slices by ImagePositionPatient (z)."""
+    dicom_files = glob(os.path.join(dicom_folder, "*.dcm"))
+    slices = [pydicom.dcmread(f) for f in dicom_files]
+    slices = [s for s in slices if hasattr(s, 'ImagePositionPatient')]
+    slices.sort(key=lambda s: float(s.ImagePositionPatient[2]))
+    return slices
+
+def dicom_to_hu(dicom_slice):
+    """Convert raw pixel data to Hounsfield Units (HU)."""
+    img = dicom_slice.pixel_array.astype(np.float32)
+    slope = getattr(dicom_slice, "RescaleSlope", 1)
+    intercept = getattr(dicom_slice, "RescaleIntercept", 0)
+    return img * slope + intercept
+
+def get_lung_mask(slice_hu, lower=-1000, upper=-400, area_thresh=0.1):
+    """Simple lung mask based on HU thresholding."""
+    mask = np.logical_and(slice_hu > lower, slice_hu < upper)
+    lung_fraction = np.sum(mask) / mask.size
+    return lung_fraction >= area_thresh  # True if enough lung present
+
+def select_representative_slices(slices, target_count=150):
+    """Select ~150 representative slices (uniform + abnormality-based)."""
+    hu_slices = [dicom_to_hu(s) for s in slices]
+    
+    # Keep only slices with lung content
+    lung_indices = [i for i, hu in enumerate(hu_slices) if get_lung_mask(hu)]
+    if not lung_indices:
+        lung_indices = list(range(len(slices)))  # fallback: keep all
+    
+    # Step 1: Uniform sampling
+    n_uniform = int(target_count * 0.65)  # ~65% uniform
+    step = max(1, len(lung_indices) // n_uniform)
+    uniform_indices = lung_indices[::step][:n_uniform]
+    
+    # Step 2: Abnormality-driven (high variance = pathology candidate)
+    n_abnormal = target_count - len(uniform_indices)
+    hu_variances = [np.var(hu) for hu in hu_slices]
+    top_indices = np.argsort(hu_variances)[-n_abnormal:]
+    
+    # Combine
+    selected = sorted(set(uniform_indices) | set(top_indices))
+    return selected
+
+def save_slices_to_jpeg(slices, selected_indices, out_folder):
+    """Save selected DICOM slices as JPEG images."""
+    os.makedirs(out_folder, exist_ok=True)
+    metadata = []
+    
+    for idx in selected_indices:
+        hu_img = dicom_to_hu(slices[idx])
+        # Normalize HU to 0–255 (windowing)
+        hu_img = np.clip((hu_img + 1000) / 2000 * 255, 0, 255).astype(np.uint8)
+        jpg_path = os.path.join(out_folder, f"slice_{idx:04d}.jpg")
+        cv2.imwrite(jpg_path, hu_img)
+        
+        metadata.append({
+            "slice_index": idx,
+            "dicom_uid": slices[idx].SOPInstanceUID,
+            "jpg_path": jpg_path,
+            "z_position": float(slices[idx].ImagePositionPatient[2])
+        })
+    
+    with open(os.path.join(out_folder, "metadata.json"), "w") as f:
+        json.dump(metadata, f, indent=2)
+    
+    return metadata
+
+def preprocess_ct_series(dicom_folder, output_folder="./processed_ct", target_count=150):
+    """End-to-end preprocessing pipeline."""
+    slices = load_dicom_series(dicom_folder)
+    selected_indices = select_representative_slices(slices, target_count)
+    metadata = save_slices_to_jpeg(slices, selected_indices, output_folder)
+    print(f"✅ Saved {len(metadata)} representative slices to {output_folder}")
+    return metadata
+
+
+# ------------------------------
+# CLI Entry Point for Replit
+# ------------------------------
+if __name__ == "__main__":
+    dicom_folder = input("Enter path to DICOM folder: ").strip()
+    out_folder = "./processed_ct"
+    metadata = preprocess_ct_series(dicom_folder, out_folder, target_count=150)
+    print("Metadata JSON saved at:", os.path.join(out_folder, "metadata.json"))

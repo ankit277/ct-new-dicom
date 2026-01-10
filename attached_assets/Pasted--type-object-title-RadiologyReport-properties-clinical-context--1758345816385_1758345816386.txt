@@ -1,0 +1,66 @@
+{
+  "type": "object",
+  "title": "RadiologyReport",
+  "properties": {
+    "clinical_context": {
+      "type": "string",
+      "description": "Clinical details provided by referrer, if available."
+    },
+    "technique": {
+      "type": "string",
+      "description": "Imaging technique, e.g., Chest CT, multi-slice (up to 128 slices)."
+    },
+    "findings": {
+      "type": "array",
+      "description": "Narrative description of relevant findings by anatomical region.",
+      "items": {
+        "type": "object",
+        "properties": {
+          "region": {
+            "type": "string",
+            "enum": ["lungs", "pleura", "mediastinum", "vasculature", "chest_wall", "other"]
+          },
+          "narrative": {
+            "type": "string",
+            "description": "Detailed radiological description for this region."
+          }
+        },
+        "required": ["region", "narrative"]
+      }
+    },
+    "impression": {
+      "type": "string",
+      "description": "Concise radiologist-style impression, highlighting urgent or critical findings first."
+    },
+    "differential_diagnoses": {
+      "type": "array",
+      "description": "List of possible alternative diagnoses considered based on imaging findings.",
+      "items": {
+        "type": "string"
+      }
+    },
+    "recommendations": {
+      "type": "string",
+      "description": "Recommended next steps such as follow-up imaging, further testing, or urgent intervention."
+    },
+    "urgent_flags": {
+      "type": "array",
+      "description": "List of urgent/life-threatening findings that require immediate attention.",
+      "items": {
+        "type": "string",
+        "enum": [
+          "tension pneumothorax",
+          "large pulmonary embolism",
+          "massive pleural effusion with shift",
+          "suspicious lung mass",
+          "other"
+        ]
+      }
+    }
+  },
+  "required": [
+    "technique",
+    "findings",
+    "impression"
+  ]
+}

@@ -1,0 +1,84 @@
+import base64
+import json
+from openai import OpenAI
+
+# Initialize OpenAI client
+client = OpenAI(api_key="YOUR_OPENAI_API_KEY")
+
+# ---- Function to encode image file to base64 ----
+def encode_image(file_path):
+    with open(file_path, "rb") as f:
+        return base64.b64encode(f.read()).decode("utf-8")
+
+# ---- Replace with your image path ----
+# Works with .dcm, .png, .jpg
+image_path = "sample_image.png"
+encoded_image = encode_image(image_path)
+
+# ---- Prompt for GPT-5 ----
+system_prompt = """
+You are a board-certified radiologist with more than 25 years of clinical experience in thoracic imaging,
+including CT, HRCT, and chest X-ray interpretation.
+You are also an AI-powered diagnostic assistant with proven >90% sensitivity and >95% specificity in detecting
+and staging chest diseases. Your task is to provide extremely detailed, accurate, and clinically validated
+detection, classification, staging, and scoring for multiple chest conditions based on provided DICOM or processed
+image data. Follow strict radiology reporting standards and evidence-based guidelines (Fleischner Society,
+ATS/ERS, NCCN, CHEST).
+"""
+
+user_prompt = f"""
+INPUT_IMAGE_BASE64: {encoded_image}
+
+TASKS:
+1. Preprocessing & Quality Check:
+   - Confirm if image quality is diagnostic, detect motion/artifacts, suggest repeat if needed.
+
+2. Condition Detection:
+   a. Interstitial Lung Disease (ILD): Presence/absence; classify subtype (UIP, NSIP, DIP, RB-ILD, HP, etc.),
+      provide extent (mild/moderate/severe) and lobar distribution.
+   b. COPD: Classify type (emphysema-predominant, chronic bronchitis, mixed), quantify emphysema %, assign GOLD stage,
+      provide BODE index score.
+   c. Lung Cancer: Detect nodules/masses, classify (solid, subsolid, ground-glass), assess size, margins, spiculation,
+      enhancement, stage (TNM), malignancy probability.
+   d. Pulmonary Embolism: Detect central/segmental/subsegmental emboli, assess clot burden, right heart strain.
+   e. Pneumonia: Detect consolidation, ground-glass opacities, distribution (lobar, segmental, bronchopneumonia, atypical),
+      severity score (CURB-65).
+   f. Tuberculosis: Detect active vs healed TB, pattern (cavitation, consolidation, miliary, tree-in-bud),
+      distribution, chronicity.
+
+3. For each detected condition, provide:
+   - Sensitivity (estimated)
+   - Specificity (estimated)
+   - AI confidence (0–100%)
+
+4. Return results in strict JSON format:
+{{
+  "image_quality": {{ "diagnostic": true/false, "issues": "..." }},
+  "ILD": {{ "presence": true/false, "subtype": "...", "extent": "...", "lobar_distribution": "...", "confidence": %, "sensitivity": %, "specificity": % }},
+  "COPD": {{ "presence": true/false, "type": "...", "emphysema_percent": %, "GOLD_stage": "...", "BODE_index": number, "confidence": %, "sensitivity": %, "specificity": % }},
+  "Lung_Cancer": {{ "presence": true/false, "type": "...", "size_mm": number, "margins": "...", "TNM_stage": "...", "malignancy_probability": %, "confidence": %, "sensitivity": %, "specificity": % }},
+  "Pulmonary_Embolism": {{ "presence": true/false, "location": "...", "clot_burden": "...", "confidence": %, "sensitivity": %, "specificity": % }},
+  "Pneumonia": {{ "presence": true/false, "pattern": "...", "distribution": "...", "severity_score": number, "confidence": %, "sensitivity": %, "specificity": % }},
+  "Tuberculosis": {{ "presence": true/false, "pattern": "...", "distribution": "...", "chronicity": "...", "confidence": %, "sensitivity": %, "specificity": % }}
+}}
+"""
+
+# ---- Call GPT-5 ----
+response = client.chat.completions.create(
+    model="gpt-5",
+    temperature=0.0,
+    max_tokens=4000,
+    messages=[
+        {"role": "system", "content": system_prompt},
+        {"role": "user", "content": user_prompt}
+    ]
+)
+
+# ---- Parse JSON output ----
+try:
+    result_text = response.choices[0].message.content
+    results = json.loads(result_text)
+    print(json.dumps(results, indent=2))
+except json.JSONDecodeError:
+    print("Error: GPT-5 did not return valid JSON.")
+    print("Raw output:", response.choices[0].message.content)
