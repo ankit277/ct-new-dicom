@@ -213,7 +213,7 @@ After fixes, verify:
 - [ ] Update reporting logic to handle co-existing pathologies
 - [ ] Add clinical context annotations ("TB with secondary pneumonia", etc.)
 - [ ] Validate with multi-pathology test cases
-- [ ] Update replit.md with new independent evaluation architecture
+- [ ] Update project documentation with new independent evaluation architecture
 
 ---
 
