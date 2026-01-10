@@ -100,7 +100,7 @@ export function buildReportContent(
     detectedPathologies: slice.detectedPathologies,
     findings: slice.findings || 'See detailed findings',
     imageData: slice.imageData,
-    filename: slice.filename || `Slice_${String(slice.sliceIndex + 1).padStart(4, '0')}.dcm`,
+    filename: slice.filename || `CT_Slice_${String(slice.sliceIndex + 1).padStart(4, '0')}.dcm`,
     isCritical: slice.detectedPathologies.some(p => CRITICAL_PATHOLOGIES.includes(p))
   }));
   
